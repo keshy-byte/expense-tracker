@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 1200px;
+            margin: 0 auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            min-height: calc(100vh - 40px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+        }
+
+        .form-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        input, select, button {
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .summary {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #007bff;
+        }
+
+        .charts {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 30px 0;
+        }
+
+        .chart-box {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .chart-box canvas {
+            max-width: 100%;
+            height: 300px !important;
+        }
+
+        #pieLegend {
+            margin-top: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .container { padding: 20px; }
+            .form-group { grid-template-columns: 1fr; }
+            .charts { grid-template-columns: 1fr; }
+            .chart-box canvas { height: 250px !important; }
+            #pieLegend { flex-direction: column; align-items: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="mainApp" style="display:none;">
+        <!-- User Profile Section -->
+        <div id="profileCard" style="display: flex; align-items: center; margin-bottom: 25px;">
+            <label for="profilePicInput" style="cursor:pointer;">
+                <img id="profilePic" src="https://ui-avatars.com/api/?name=User" alt="Avatar" style="width:60px; height:60px; border-radius:50%; margin-right:18px; object-fit:cover;">
+                <input type="file" id="profilePicInput" accept="image/*" style="display:none;">
+            </label>
+            <div>
+                <div style="font-size: 1.2rem; font-weight: bold;" id="profileName">User Name</div>
+                <button id="editProfileBtn" style="margin-top: 5px; padding: 5px 12px; font-size: 14px;">Edit Profile</button>
+            </div>
+        </div>
+
+        <h1>Expense Tracker</h1>
+        
+        <form id="expenseForm">
+            <div class="form-group">
+                <input type="number" id="amount" placeholder="Amount" required>
+                <input type="date" id="date" required>
+                <select id="category" required>
+                    <option value="">Select Category</option>
+                    <option value="Food">Food</option>
+                    <option value="Rent">Rent</option>
+                    <option value="Transport">Transport</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Other">Other</option>
+                </select>
+                <button type="submit">Add Expense</button>
+            </div>
+        </form>
+
+        <div class="summary">
+            <h2>Monthly Summary</h2>
+            <div id="totals">
+                <p id="weekTotal">This Week: $0.00</p>
+                <p id="monthTotal">This Month: $0.00</p>
+            </div>
+            <ul id="monthlySummary"></ul>
+        </div>
+
+        <div class="charts">
+            <div class="chart-box">
+                <h2>Monthly Expenses</h2>
+                <canvas id="barChart"></canvas>
+            </div>
+            <div class="chart-box">
+                <h2>Category Distribution</h2>
+                <canvas id="pieChart"></canvas>
+                <div id="pieLegend"></div>
+            </div>
+        </div>
+    </div>
+    <div class="container" id="authContainer" style="max-width:400px; margin-top:60px;">
+        <h2 id="authTitle">Login</h2>
+        <form id="authForm">
+            <div class="form-group" style="grid-template-columns:1fr;">
+                <input type="text" id="authUsername" placeholder="Username" required>
+                <input type="password" id="authPassword" placeholder="Password" required>
+                <button type="submit" id="authBtn">Login</button>
+            </div>
+        </form>
+        <p id="authSwitch" style="text-align:center; margin-top:10px; cursor:pointer; color:#007bff;">Don't have an account? Register</p>
+        <p id="authError" style="color:red; text-align:center; margin-top:10px;"></p>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        let expenses = {};
+        let barChart = null;
+        let pieChart = null;
+        
+        // Initialize charts when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+        });
+        
+        function initializeCharts() {
+            // Initialize bar chart
+            const barCtx = document.getElementById('barChart').getContext('2d');
+            barChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Monthly Total',
+                        data: [],
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+            
+            // Initialize pie chart
+            const pieCtx = document.getElementById('pieChart').getContext('2d');
+            pieChart = new Chart(pieCtx, {
+                type: 'pie',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.8)',
+                            'rgba(54, 162, 235, 0.8)',
+                            'rgba(255, 206, 86, 0.8)',
+                            'rgba(75, 192, 192, 0.8)',
+                            'rgba(153, 102, 255, 0.8)',
+                            'rgba(255, 159, 64, 0.8)'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+        
+        document.getElementById('expenseForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const amount = parseFloat(document.getElementById('amount').value);
+            const date = document.getElementById('date').value;
+            const category = document.getElementById('category').value;
+            
+            if (!amount || !date || !category) {
+                alert('Please fill all fields!');
+                return;
+            }
+            
+            const month = date.substring(0, 7); // YYYY-MM format
+            
+            if (!expenses[month]) {
+                expenses[month] = {};
+            }
+            
+            if (!expenses[month][category]) {
+                expenses[month][category] = 0;
+            }
+            
+            expenses[month][category] += amount;
+            
+            updateDisplay();
+            this.reset();
+        });
+        
+        function updateDisplay() {
+            // Update summary
+            const summaryList = document.getElementById('monthlySummary');
+            summaryList.innerHTML = '';
+            
+            for (let month in expenses) {
+                const total = Object.values(expenses[month]).reduce((sum, val) => sum + val, 0);
+                const li = document.createElement('li');
+                li.textContent = month + ': $' + total.toFixed(2);
+                summaryList.appendChild(li);
+            }
+            
+            // Update charts
+            updateCharts();
+        }
+        
+        function updateCharts() {
+            // Update bar chart
+            const months = Object.keys(expenses);
+            const monthlyTotals = months.map(month => 
+                Object.values(expenses[month]).reduce((sum, val) => sum + val, 0)
+            );
+            
+            barChart.data.labels = months;
+            barChart.data.datasets[0].data = monthlyTotals;
+            barChart.update();
+            
+            // Update pie chart
+            const categoryTotals = {};
+            
+            for (let month in expenses) {
+                for (let category in expenses[month]) {
+                    if (!categoryTotals[category]) {
+                        categoryTotals[category] = 0;
+                    }
+                    categoryTotals[category] += expenses[month][category];
+                }
+            }
+            
+            const categories = Object.keys(categoryTotals);
+            const categoryData = Object.values(categoryTotals);
+            
+            pieChart.data.labels = categories;
+            pieChart.data.datasets[0].data = categoryData;
+            pieChart.update();
+            
+            // Update pie chart legend
+            updatePieLegend(categories, categoryData);
+        }
+        
+        function updatePieLegend(categories, data) {
+            const legendContainer = document.getElementById('pieLegend');
+            const colors = pieChart.data.datasets[0].backgroundColor;
+            
+            legendContainer.innerHTML = categories.map((category, index) => {
+                return `
+                    <span style="display: inline-flex; align-items: center; margin: 5px 10px; padding: 5px 10px; background: white; border-radius: 15px; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <span style="width: 12px; height: 12px; background: ${colors[index]}; margin-right: 8px; border-radius: 50%;"></span>
+                        ${category}
+                    </span>
+                `;
+            }).join('');
+        }
+
+        // User Profile Logic
+        let userName = localStorage.getItem('userName') || 'User Name';
+        document.getElementById('profileName').textContent = userName;
+
+        // Load profile picture from localStorage if available
+        const savedPic = localStorage.getItem('profilePic');
+        const profilePic = document.getElementById('profilePic');
+        if (savedPic) {
+            profilePic.src = savedPic;
+        } else {
+            profilePic.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}`;
+        }
+
+        document.getElementById('editProfileBtn').addEventListener('click', function() {
+            const newName = prompt('Enter your name:', userName);
+            if (newName && newName.trim() !== '') {
+                userName = newName.trim();
+                document.getElementById('profileName').textContent = userName;
+                localStorage.setItem('userName', userName);
+                // Update avatar only if no custom pic
+                if (!localStorage.getItem('profilePic')) {
+                    profilePic.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}`;
+                }
+            }
+        });
+
+        // Handle profile picture upload
+        document.getElementById('profilePicInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    profilePic.src = evt.target.result;
+                    localStorage.setItem('profilePic', evt.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Allow user to remove custom profile picture (optional)
+        profilePic.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            if (localStorage.getItem('profilePic')) {
+                if (confirm('Remove profile picture?')) {
+                    localStorage.removeItem('profilePic');
+                    profilePic.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}`;
+                }
+            }
+        });
+
+        // --- Simple Authentication Logic ---
+        let isLogin = true;
+        const authContainer = document.getElementById('authContainer');
+        const mainApp = document.getElementById('mainApp');
+        const authTitle = document.getElementById('authTitle');
+        const authBtn = document.getElementById('authBtn');
+        const authSwitch = document.getElementById('authSwitch');
+        const authError = document.getElementById('authError');
+
+        function showApp() {
+            authContainer.style.display = 'none';
+            mainApp.style.display = '';
+        }
+
+        function showAuth() {
+            authContainer.style.display = '';
+            mainApp.style.display = 'none';
+            document.getElementById('authForm').reset(); // Clear login fields
+            authError.textContent = ''; // Optionally clear error message
+        }
+
+        // Check if user is authenticated
+        if (localStorage.getItem('isAuthenticated') === 'true') {
+            showApp();
+        } else {
+            showAuth();
+        }
+
+        authSwitch.onclick = function() {
+            isLogin = !isLogin;
+            authTitle.textContent = isLogin ? 'Login' : 'Register';
+            authBtn.textContent = isLogin ? 'Login' : 'Register';
+            authSwitch.textContent = isLogin ? "Don't have an account? Register" : "Already have an account? Login";
+            authError.textContent = '';
+        };
+
+        document.getElementById('authForm').onsubmit = function(e) {
+            e.preventDefault();
+            const username = document.getElementById('authUsername').value.trim();
+            const password = document.getElementById('authPassword').value;
+
+            if (!username || !password) {
+                authError.textContent = 'Please fill all fields!';
+                return;
+            }
+
+            if (isLogin) {
+                // Login
+                const storedUser = JSON.parse(localStorage.getItem('userAuth') || '{}');
+                if (storedUser.username === username && storedUser.password === password) {
+                    localStorage.setItem('isAuthenticated', 'true');
+                    showApp();
+                } else {
+                    authError.textContent = 'Invalid credentials!';
+                }
+            } else {
+                // Register
+                localStorage.setItem('userAuth', JSON.stringify({ username, password }));
+                authError.style.color = 'green';
+                authError.textContent = 'Successfully registered! Please log in.';
+                setTimeout(() => {
+                    isLogin = true;
+                    authTitle.textContent = 'Login';
+                    authBtn.textContent = 'Login';
+                    authSwitch.textContent = "Don't have an account? Register";
+                    authError.textContent = '';
+                    document.getElementById('authForm').reset();
+                }, 1800);
+            }
+        };
+
+        // Optional: Add logout button to profile section
+        const profileCard = document.getElementById('profileCard');
+        if (profileCard) {
+            const logoutBtn = document.createElement('button');
+            logoutBtn.textContent = 'Logout';
+            logoutBtn.style.marginLeft = '10px';
+            logoutBtn.onclick = function() {
+                localStorage.removeItem('isAuthenticated'); // Only remove session
+                showAuth();
+            };
+            profileCard.appendChild(logoutBtn);
+        }
+    </script>
+</body>
+</html>
